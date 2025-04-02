@@ -67,7 +67,7 @@ end
 
 local function lsp_support_method(buf, method)
   for _, client in pairs(lsp_get_clients_method({ bufnr = buf })) do
-    if client.supports_method(method) then
+    if client:supports_method(method) then
       return true
     end
   end
