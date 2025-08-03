@@ -1,0 +1,17 @@
+skip_lfs: true
+pre-commit:
+  commands:
+    hookcheck:
+      glob: "lefthook.yml"
+      run: lefthook validate
+  jobs:
+  - name: lint
+    group:
+      piped: true # Stop if one of the steps fail
+      jobs:
+        - name: stylua
+          glob: "*.lua"
+          run: stylua {staged_files}
+        - name: llscheck
+          glob: "*.lua"
+          run: llscheck lua/
