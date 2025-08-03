@@ -1,0 +1,8 @@
+skip_output:
+  - meta
+pre-commit:
+  parallel: true
+  commands:
+    stylua:
+      glob: "*.lua"
+      run: stylua --check {staged_files}
