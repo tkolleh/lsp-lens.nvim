@@ -6,3 +6,6 @@ pre-commit:
     stylua:
       glob: "*.lua"
       run: stylua --check {staged_files}
+    lua-types:
+      glob: "*.lua"
+      run: llscheck lua/
