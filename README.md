@@ -103,7 +103,6 @@ We welcome contributions to this project! Please follow these guidelines when co
 - **Pull Requests:** When submitting a pull request, please make sure that your changes are well-tested and that you have followed the coding standards for this project.
 - **Coding Standards:** This project uses `stylua` to format Lua code. Please make sure that your code is formatted with `stylua` before submitting a pull request.
 - **Commit Hooks:** This project uses `lefthook` to manage commit hooks. Please make sure that you have `lefthook` installed before committing any changes. You can find installation instructions [here](https://github.com/evilmartians/lefthook/blob/master/docs/install.md).
-- **Documentation:** This project uses `panvimdoc` to generate documentation. Please make sure that you have `panvimdoc` installed before pushing any changes. You can find installation instructions [here](https://github.com/kdheepak/panvimdoc).
 
 ## Attribution
 
