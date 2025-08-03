@@ -16,7 +16,7 @@ lsp server correctly setup
 
 ```lua
 require("lazy").setup({
-  'VidocqH/lsp-lens.nvim'
+  'tkolleh/lsp-lens.nvim'
 })
 ```
 
@@ -94,6 +94,17 @@ require'lsp-lens'.setup({
 
 - Due to a [known issue](https://github.com/neovim/neovim/issues/16166) with the neovim `nvim_buf_set_extmark()` api, the function and method defined on the first line of the code may cause the len to display at the -1 index line, which is not visible.
 
-## Thanks
 
-[lspsaga by glepnir](https://github.com/glepnir/lspsaga.nvim#customize-appearance)
+## Contributing
+
+We welcome contributions to this project! Please follow these guidelines when contributing:
+
+- **Issues:** Before submitting a new issue, please search the existing issues to see if your problem has already been reported.
+- **Pull Requests:** When submitting a pull request, please make sure that your changes are well-tested and that you have followed the coding standards for this project.
+- **Coding Standards:** This project uses `stylua` to format Lua code. Please make sure that your code is formatted with `stylua` before submitting a pull request.
+- **Commit Hooks:** This project uses `lefthook` to manage commit hooks. Please make sure that you have `lefthook` installed before committing any changes. You can find installation instructions [here](https://github.com/evilmartians/lefthook/blob/master/docs/install.md).
+- **Documentation:** This project uses `panvimdoc` to generate documentation. Please make sure that you have `panvimdoc` installed before pushing any changes. You can find installation instructions [here](https://github.com/kdheepak/panvimdoc).
+
+## Attribution
+
+This project was forked from the work of [VidocqH](https://github.com/VidocqH). We are grateful for their contributions to the open source community.

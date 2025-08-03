@@ -34,7 +34,7 @@ LAZY ~
 
 >lua
     require("lazy").setup({
-      'VidocqH/lsp-lens.nvim'
+      'tkolleh/lsp-lens.nvim'
     })
 <
 
