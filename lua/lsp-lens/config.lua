@@ -6,6 +6,7 @@ local defaults = {
   enable = true,
   include_declaration = false, -- Reference include declaration
   hide_zero_counts = true, -- Hide lsp sections which have no content
+  log_level = "DEBUG", -- Add log level (DEBUG, INFO, WARN, ERROR)
   sections = {
     definition = function(count)
       return "Definitions: " .. count
@@ -15,6 +16,9 @@ local defaults = {
     end,
     implements = function(count)
       return "Implements: " .. count
+    end,
+    code_lens = function(title)
+      return title
     end,
     git_authors = function(latest_author, count)
       return " " .. latest_author .. (count - 1 == 0 and "" or (" + " .. count - 1))
@@ -28,9 +32,9 @@ local defaults = {
     "prisma",
   },
   -- Target Symbol Kinds to show lens information
-  target_symbol_kinds = { SymbolKind.Function, SymbolKind.Method, SymbolKind.Interface },
+  target_symbol_kinds = { SymbolKind.Function, SymbolKind.Method, SymbolKind.Interface, SymbolKind.Field, SymbolKind.Package },
   -- Symbol Kinds that may have target symbol kinds as children
-  wrapper_symbol_kinds = { SymbolKind.Class, SymbolKind.Struct },
+  wrapper_symbol_kinds = { SymbolKind.Class, SymbolKind.Struct, SymbolKind.EnumMember },
 }
 
 M.config = vim.deepcopy(defaults)

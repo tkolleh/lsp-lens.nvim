@@ -1,6 +1,7 @@
 local lsplens = {}
 local config = require("lsp-lens.config")
 local utils = require("lsp-lens.utils")
+local log = require("lsp-lens.log")
 
 local lsp = vim.lsp
 local lsp_get_clients_method
@@ -14,6 +15,7 @@ local methods = {
   "textDocument/implementation",
   "textDocument/definition",
   "textDocument/references",
+  "textDocument/codeLens",
 }
 
 local function result_count(results)
@@ -28,7 +30,8 @@ end
 
 local function requests_done(finished)
   for _, p in pairs(finished) do
-    if not (p[1] == true and p[2] == true and p[3] == true) then
+    -- Check all flags, including the new codeLens flag (index 5)
+    if not (p[1] == true and p[2] == true and p[3] == true and p[4] == true and p[5] == true) then
       return false
     end
   end
@@ -50,7 +53,7 @@ local function get_functions(result)
       end
     end
 
-    if vim.tbl_contains(config.config.wrapper_symbol_kinds, v.kind) then
+    if v.children then -- Check if children exist before recursing
       ret = utils:merge_table(ret, get_functions(v.children)) -- Recursively find methods
     end
   end
@@ -74,8 +77,11 @@ local function client_supports_method(client, method)
 end
 
 local function lsp_support_method(buf, method)
+  log.debug("Checking LSP support for method: ", method, " on buffer: ", buf)
   for _, client in pairs(lsp_get_clients_method({ bufnr = buf })) do
-    if client_supports_method(client, method) then
+    local supports = client_supports_method(client, method)
+    log.debug("  Client: ", client.name, ", Supports ", method, ": ", supports)
+    if supports then
       return true
     end
   end
@@ -86,13 +92,12 @@ local function create_string(counting)
   local cfg = config.config
   local text = ""
 
-  -- TODO: refactor
-  local function append_with(count, fn)
-    if fn == nil or (cfg.hide_zero_counts and count == 0) then
+  local function append_with(value, fn)
+    if fn == nil or (cfg.hide_zero_counts and (type(value) == "number" and value == 0)) then
       return
     end
 
-    local formatted = fn(count)
+    local formatted = fn(value)
     if formatted == nil or formatted == "" then
       return
     end
@@ -110,6 +115,12 @@ local function create_string(counting)
 
   if counting.implementation then
     append_with(counting.implementation, cfg.sections.implements)
+  end
+
+  if counting.code_lens and #counting.code_lens > 0 then
+    for _, lens_title in ipairs(counting.code_lens) do
+      append_with(lens_title, cfg.sections.code_lens)
+    end
   end
 
   if counting.git_authors then
@@ -165,6 +176,7 @@ end
 
 local function display_lines(bufnr, query_results)
   if vim.fn.bufexists(bufnr) == 0 then
+    log.warn("Buffer ", bufnr, " does not exist. Cannot display lines.")
     return
   end
   local ns_id = vim.api.nvim_create_namespace("lsp-lens")
@@ -172,6 +184,8 @@ local function display_lines(bufnr, query_results)
   for _, query in pairs(query_results or {}) do
     local virt_lines = {}
     local display_str = create_string(query.counting)
+    log.debug("Query counting: ", vim.inspect(query.counting))
+    log.debug("Display string: ", display_str)
 
     if not (display_str == "") then
       normalize_rangeStart_character(bufnr, query.rangeStart)
@@ -194,6 +208,7 @@ local function get_recent_editor(start_row, end_row, callback)
 
   local stdout = vim.loop.new_pipe()
   if stdout == nil then
+    log.error("Failed to create pipe for git blame.")
     return
   end
 
@@ -202,7 +217,10 @@ local function get_recent_editor(start_row, end_row, callback)
   vim.loop.spawn("git", {
     args = { "blame", "-L", start_row .. "," .. end_row, "--incremental", file_path },
     stdio = { nil, stdout, nil },
-  }, function(_, _)
+  }, function(exit_code, signal_name)
+    if exit_code ~= 0 then
+      log.error("Git blame failed with exit code ", exit_code, " and signal ", signal_name)
+    end
     local authors_arr = {}
     for author_name, _ in pairs(authors) do
       table.insert(authors_arr, author_name)
@@ -210,6 +228,10 @@ local function get_recent_editor(start_row, end_row, callback)
     callback(most_recent_editor, authors_arr)
   end)
   vim.loop.read_start(stdout, function(err, data)
+    if err then
+      log.error("Error reading git blame output: ", err)
+      return
+    end
     if data == nil then
       return
     end
@@ -233,7 +255,9 @@ local function get_recent_editor(start_row, end_row, callback)
 end
 
 local function do_request(symbols)
+  log.debug("Starting do_request for buffer: ", symbols.bufnr)
   if not (utils:is_buf_requesting(symbols.bufnr) == -1) then
+    log.debug("Buffer ", symbols.bufnr, " is already requesting. Skipping.")
     return
   else
     utils:set_buf_requesting(symbols.bufnr, 0)
@@ -243,50 +267,83 @@ local function do_request(symbols)
   local finished = {}
 
   for idx, function_info in pairs(functions or {}) do
-    table.insert(finished, { false, false, false, false })
+    -- Initialize all flags to false, including the new codeLens flag
+    table.insert(finished, { false, false, false, false, false })
 
     local params = function_info.query_params
     local counting = {}
 
     if config.config.sections.implements and lsp_support_method(symbols.bufnr, methods[1]) then
+      log.debug("Requesting textDocument/implementation for ", function_info.name)
       lsp.buf_request_all(symbols.bufnr, methods[1], params, function(implements)
         counting["implementation"] = result_count(implements)
         finished[idx][1] = true
+        log.debug("Received textDocument/implementation for ", function_info.name, ": ", counting.implementation)
       end)
     else
       finished[idx][1] = true
+      log.debug("Skipping textDocument/implementation for ", function_info.name)
     end
 
     if config.config.sections.definition and lsp_support_method(symbols.bufnr, methods[2]) then
+      log.debug("Requesting textDocument/definition for ", function_info.name)
       lsp.buf_request_all(symbols.bufnr, methods[2], params, function(definition)
         counting["definition"] = result_count(definition)
         finished[idx][2] = true
+        log.debug("Received textDocument/definition for ", function_info.name, ": ", counting.definition)
       end)
     else
       finished[idx][2] = true
+      log.debug("Skipping textDocument/definition for ", function_info.name)
     end
 
     if config.config.sections.references and lsp_support_method(symbols.bufnr, methods[3]) then
+      log.debug("Requesting textDocument/references for ", function_info.name)
       params.context = { includeDeclaration = config.config.include_declaration }
       lsp.buf_request_all(symbols.bufnr, methods[3], params, function(reference)
         counting["reference"] = result_count(reference)
         finished[idx][3] = true
+        log.debug("Received textDocument/references for ", function_info.name, ": ", counting.reference)
       end)
     else
       finished[idx][3] = true
+      log.debug("Skipping textDocument/references for ", function_info.name)
+    end
+
+    if config.config.sections.code_lens and lsp_support_method(symbols.bufnr, methods[4]) then
+      log.debug("Requesting textDocument/codeLens for ", function_info.name)
+      lsp.buf_request_all(symbols.bufnr, methods[4], params, function(code_lens_results)
+        local titles = {}
+        for _, res in pairs(code_lens_results or {}) do
+          for _, lens in pairs(res.result or {}) do
+            if lens.command and lens.command.title then
+              table.insert(titles, lens.command.title)
+            end
+          end
+        end
+        counting["code_lens"] = titles
+        finished[idx][4] = true
+        log.debug("Received textDocument/codeLens for ", function_info.name, ": ", titles)
+      end)
+    else
+      finished[idx][4] = true
+      log.debug("Skipping textDocument/codeLens for ", function_info.name)
     end
 
     if config.config.sections.git_authors then
+      log.debug("Requesting git_authors for ", function_info.name)
       get_recent_editor(
         function_info.rangeStart.line + 1,
         function_info.rangeEnd.line + 1,
         function(latest_author, authors)
           counting["git_authors"] = { latest_author = latest_author, count = #authors }
-          finished[idx][4] = true
+          finished[idx][5] = true
+          log.debug("Received git_authors for ", function_info.name, ": ", latest_author, " (", #authors, ")")
         end
       )
     else
-      finished[idx][4] = true
+      finished[idx][5] = true
+      log.debug("Skipping git_authors for ", function_info.name)
     end
 
     function_info["counting"] = counting
@@ -300,9 +357,11 @@ local function do_request(symbols)
       if requests_done(finished) then
         if timer ~= nil and timer:is_closing() == false then
           timer:close()
+          log.debug("Timer closed for buffer: ", symbols.bufnr)
         end
         display_lines(symbols.bufnr, functions)
         utils:set_buf_requesting(symbols.bufnr, 1)
+        log.debug("Requests done and lines displayed for buffer: ", symbols.bufnr)
       end
     end)
   )
@@ -324,12 +383,14 @@ end
 
 function lsplens:lsp_lens_on()
   config.config.enable = true
+  log.info("LspLens enabled.")
   lsplens:procedure()
 end
 
 function lsplens:lsp_lens_off()
   config.config.enable = false
   delete_existing_lines(0, vim.api.nvim_create_namespace("lsp-lens"))
+  log.info("LspLens disabled.")
 end
 
 function lsplens:lsp_lens_toggle()
@@ -347,24 +408,49 @@ function lsplens:procedure()
   end
 
   local bufnr = vim.api.nvim_get_current_buf()
+  log.debug("Procedure started for buffer: ", bufnr)
 
   -- Ignored Filetype
   if utils:table_find(config.config.ignore_filetype, vim.api.nvim_buf_get_option(bufnr, "filetype")) then
+    log.info("Filetype ", vim.api.nvim_buf_get_option(bufnr, "filetype"), " is ignored. Skipping procedure.")
     return
   end
 
   local method = "textDocument/documentSymbol"
-  if lsp_support_method(bufnr, method) then
-    local params = { textDocument = lsp.util.make_text_document_params() }
-    lsp.buf_request_all(bufnr, method, params, function(document_symbols)
-      -- vim.pretty_print(lsp.buf_request_sync(0, "textDocument/codeLens", document_symbols, 1000))
-      local symbols = {}
-      symbols["bufnr"] = bufnr
-      symbols["document_symbols"] = document_symbols
-      symbols["document_functions"] = get_cur_document_functions(symbols.document_symbols)
-      symbols["document_functions_with_params"] = make_params(symbols.document_functions)
-      do_request(symbols)
-    end)
+  local max_retries = 5
+  local retry_delay_ms = 100
+
+  local function try_document_symbol()
+    if lsp_support_method(bufnr, method) then
+      log.debug("Requesting textDocument/documentSymbol for buffer: ", bufnr)
+      local params = { textDocument = lsp.util.make_text_document_params() }
+      lsp.buf_request_all(bufnr, method, params, function(document_symbols)
+        log.debug("Received textDocument/documentSymbol for buffer: ", bufnr)
+        local symbols = {}
+        symbols["bufnr"] = bufnr
+        symbols["document_symbols"] = document_symbols
+        symbols["document_functions"] = get_cur_document_functions(symbols.document_symbols)
+        symbols["document_functions_with_params"] = make_params(symbols.document_functions)
+        log.debug("Document functions with params: ", vim.inspect(symbols.document_functions_with_params))
+        do_request(symbols)
+      end)
+      return true -- Request sent, exit retry loop
+    end
+    return false -- Method not supported yet, continue retrying
+  end
+
+  local success = false
+  for i = 1, max_retries do
+    success = try_document_symbol()
+    if success then
+      break
+    end
+    log.debug("Retrying textDocument/documentSymbol check for buffer: ", bufnr, ". Attempt ", i, " of ", max_retries)
+    vim.loop.sleep(retry_delay_ms)
+  end
+
+  if not success then
+    log.info("LSP client does not support textDocument/documentSymbol for buffer: ", bufnr, " after ", max_retries, " retries. Skipping procedure.")
   end
 end
 
