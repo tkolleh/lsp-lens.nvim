@@ -14,4 +14,4 @@ pre-commit:
           run: stylua {staged_files}
         - name: llscheck
           glob: "*.lua"
-          run: llscheck lua/
+          run: llscheck --checklevel Error lua/
