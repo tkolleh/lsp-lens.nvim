@@ -151,26 +151,47 @@ local function delete_existing_lines(bufnr, ns_id)
 end
 
 local function normalize_rangeStart_character(bufnr, query)
-  local clients = lsp_get_clients_method({ bufnr = bufnr, name = "lua_ls" })
+  local filetype = vim.api.nvim_buf_get_option(bufnr, "filetype")
+  log.debug(
+    "normalize_rangeStart_character: bufnr=",
+    bufnr,
+    ", filetype=",
+    filetype,
+    ", original_char=",
+    query.character,
+    ", line=",
+    query.line
+  )
 
-  if vim.tbl_isempty(clients) then
-    return
-  end
+  if filetype == "lua" then
+    local clients = lsp_get_clients_method({ bufnr = bufnr, name = "lua_ls" })
 
-  local str = "local "
+    if vim.tbl_isempty(clients) then
+      log.debug("normalize_rangeStart_character: No lua_ls client found. Skipping normalization.")
+      return
+    end
 
-  local lines = vim.api.nvim_buf_get_lines(bufnr, query.line, query.line + 1, true)
-  if #lines == 0 then
-    return
-  end
-  local line = lines[1]
+    local str = "local "
 
-  local indent = line:match("^%s+")
-  indent = indent and indent:len() or 0
-  local trimmed = vim.trim(line)
+    local lines = vim.api.nvim_buf_get_lines(bufnr, query.line, query.line + 1, true)
+    if #lines == 0 then
+      log.debug("normalize_rangeStart_character: Line is empty. Skipping normalization.")
+      return
+    end
+    local line = lines[1]
 
-  if trimmed:sub(1, str:len()) == str then
-    query.character = indent + query.character - str:len()
+    local indent = line:match("^%s+")
+    indent = indent and indent:len() or 0
+    local trimmed = vim.trim(line)
+
+    if trimmed:sub(1, str:len()) == str then
+      query.character = indent + query.character - str:len()
+      log.debug("normalize_rangeStart_character: Adjusted character to ", query.character)
+    else
+      log.debug("normalize_rangeStart_character: 'local ' not found. No adjustment.")
+    end
+  else
+    log.debug("normalize_rangeStart_character: Not a Lua file. Skipping normalization.")
   end
 end
 
@@ -450,7 +471,13 @@ function lsplens:procedure()
   end
 
   if not success then
-    log.info("LSP client does not support textDocument/documentSymbol for buffer: ", bufnr, " after ", max_retries, " retries. Skipping procedure.")
+    log.info(
+      "LSP client does not support textDocument/documentSymbol for buffer: ",
+      bufnr,
+      " after ",
+      max_retries,
+      " retries. Skipping procedure."
+    )
   end
 end
 

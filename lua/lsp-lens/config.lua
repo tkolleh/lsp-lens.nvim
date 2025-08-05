@@ -32,7 +32,13 @@ local defaults = {
     "prisma",
   },
   -- Target Symbol Kinds to show lens information
-  target_symbol_kinds = { SymbolKind.Function, SymbolKind.Method, SymbolKind.Interface, SymbolKind.Field, SymbolKind.Package },
+  target_symbol_kinds = {
+    SymbolKind.Function,
+    SymbolKind.Method,
+    SymbolKind.Interface,
+    SymbolKind.Field,
+    SymbolKind.Package,
+  },
   -- Symbol Kinds that may have target symbol kinds as children
   wrapper_symbol_kinds = { SymbolKind.Class, SymbolKind.Struct, SymbolKind.EnumMember },
 }

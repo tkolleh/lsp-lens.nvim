@@ -45,7 +45,7 @@ end
 ---return boolean isFind
 function M:table_find(tbl, target)
   for _, val in pairs(tbl) do
-    if (val == target) then
+    if val == target then
       return true
     end
   end
@@ -63,4 +63,3 @@ function M:write_table(tbl)
 end
 
 return M
-
